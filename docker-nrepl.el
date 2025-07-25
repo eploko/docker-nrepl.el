@@ -145,24 +145,35 @@ Return (name . id) pair. With optional PROMPT, use that instead of default."
       (when (fboundp 'marginalia-mode)
         (advice-remove 'marginalia--annotate-original 'docker-nrepl-annotate)))))
 
+(defun docker-nrepl-connect--with-retry (force-select)
+  "Helper function that implements the retry logic for docker-nrepl-connect.
+FORCE-SELECT when non-nil forces container selection dialog."
+  (let* ((container (if (or force-select (null docker-nrepl-last-container))
+                        (docker-nrepl-select-container)
+                      docker-nrepl-last-container))
+         (container-id (cdr container))
+         (container-name (car container))
+         (host-port (docker-nrepl--find-port-mapping container-id docker-nrepl-internal-port)))
+    (if host-port
+        (progn
+          (message "Connecting to nREPL in container %s (%s) on port %s"
+		   container-name container-id host-port)
+          (cider-connect-clj (list :host "localhost" :port host-port)))
+      ;; Port not found - ask user if they want to try another container
+      (when (yes-or-no-p
+	     (format (concat "Could not find port %d mapping for container %s (%s). "
+			     "Would you like to choose another container? ")
+                     docker-nrepl-internal-port container-name container-id))
+        ;; User wants to try again - recurse with force-select=t
+        (docker-nrepl-connect--with-retry t)))))
+
 ;;;###autoload
 (defun docker-nrepl-connect (&optional arg)
   "Connect to nREPL running in a Docker container.
 When called with prefix argument ARG (C-u), prompt for container selection.
 Otherwise, use the last selected container if available."
   (interactive "P")
-  (let* ((container (if (or arg (null docker-nrepl-last-container))
-                         (docker-nrepl-select-container)
-                       docker-nrepl-last-container))
-         (container-id (cdr container))
-         (container-name (car container))
-         (host-port (docker-nrepl--find-port-mapping container-id docker-nrepl-internal-port)))
-    (if host-port
-        (progn
-          (message "Connecting to nREPL in container %s on port %s" container-name host-port)
-          (cider-connect-clj (list :host "localhost" :port host-port)))
-      (user-error "Could not find port %d mapping for container %s" 
-                  docker-nrepl-internal-port container-name))))
+  (docker-nrepl-connect--with-retry arg))
 
 ;;;###autoload
 (defun docker-nrepl-set-project-container ()
