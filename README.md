@@ -26,7 +26,9 @@ A simple Emacs package to connect to nREPL servers running inside Docker contain
 
 ```elisp
 (use-package docker-nrepl
-  :load-path "/path/to/docker-nrepl.el" ;; Or omit if installed via package.el
+  :straight (:host github :repo "eploko/docker-nrepl.el")
+  ;; or... 
+  ;; :load-path "/path/to/docker-nrepl.el"
   :after cider
   :config
   (docker-nrepl-setup))
