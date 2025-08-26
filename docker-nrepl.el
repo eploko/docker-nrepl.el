@@ -110,10 +110,10 @@
                          (format "docker inspect --format '{{.State.Status}}' %s" container-id)))
            (image (string-trim image-info))
            (status (string-trim status-info)))
-      (format " %s  %s  %s" 
-              (propertize container-id 'face 'font-lock-comment-face)
-              (propertize image 'face 'font-lock-string-face)
-              (propertize status 'face 'success)))))
+      (marginalia--fields
+       (container-id :face 'font-lock-comment-face)
+       (image :face 'font-lock-string-face :truncate 1.0)
+       (status :face 'success)))))
 
 ;; Create completion table with proper metadata
 (defun docker-nrepl--completion-table ()
