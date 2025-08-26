@@ -83,7 +83,11 @@
 
 (defun docker-nrepl--get-containers ()
   "Get a list of running Docker containers as (name . id) pairs."
-  (let* ((docker-output (shell-command-to-string "docker ps --format '{{.Names}}|{{.ID}}'"))
+  (let* ((docker-output
+	  (shell-command-to-string
+	   (format (concat "docker ps --format '{{.Names}}|{{.ID}}' "
+			   "--filter=expose=%d/tcp")
+		   docker-nrepl-internal-port)))
          (lines (split-string docker-output "\n" t)))
     (mapcar (lambda (line)
               (let ((parts (split-string line "|" t)))
