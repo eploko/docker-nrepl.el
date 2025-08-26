@@ -132,7 +132,7 @@
 (defun docker-nrepl-select-container (&optional prompt)
   "Select a Docker container interactively with completion.
 Return (name . id) pair. With optional PROMPT, use that instead of default."
-  (let* ((prompt (or prompt "Select Docker container: "))
+  (let* ((prompt (or prompt "Connect to nREPL in container: "))
          (completion-table (docker-nrepl--completion-table))
          (selected-name (completing-read prompt
                                          completion-table
