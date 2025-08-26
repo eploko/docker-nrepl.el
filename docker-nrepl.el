@@ -98,52 +98,47 @@
     (when (string-match "0.0.0.0:\\([0-9]+\\)" docker-output)
       (match-string 1 docker-output))))
 
-(defun docker-nrepl--container-info (container)
-  "Add container information for marginalia annotations.
-CONTAINER is a (name . id) pair."
-  (let* ((container-id (cdr container))
-         (image-info (shell-command-to-string 
-                      (format "docker inspect --format '{{.Config.Image}}' %s" container-id)))
-         (status-info (shell-command-to-string 
-                       (format "docker inspect --format '{{.State.Status}}' %s" container-id))))
-    (format "ID: %s   Image: %s   Status: %s" 
-            container-id
-            (string-trim image-info)
-            (string-trim status-info))))
+;; Marginalia integration
+(defun docker-nrepl--marginalia-annotate (cand)
+  "Provide Marginalia annotation for Docker container CAND."
+  (when-let* ((containers (docker-nrepl--get-containers))
+              (container (assoc cand containers))
+              (container-id (cdr container)))
+    (let* ((image-info (shell-command-to-string 
+                        (format "docker inspect --format '{{.Config.Image}}' %s" container-id)))
+           (status-info (shell-command-to-string 
+                         (format "docker inspect --format '{{.State.Status}}' %s" container-id)))
+           (image (string-trim image-info))
+           (status (string-trim status-info)))
+      (format " %s  %s  %s" 
+              (propertize container-id 'face 'font-lock-comment-face)
+              (propertize image 'face 'font-lock-string-face)
+              (propertize status 'face 'success)))))
+
+;; Create completion table with proper metadata
+(defun docker-nrepl--completion-table ()
+  "Create a completion table for Docker containers with proper category."
+  (let ((containers (mapcar #'car (docker-nrepl--get-containers))))
+    (lambda (string pred action)
+      (if (eq action 'metadata)
+          '(metadata (category . docker-container))
+        (complete-with-action action containers string pred)))))
 
 ;;;###autoload
 (defun docker-nrepl-select-container (&optional prompt)
   "Select a Docker container interactively with completion.
 Return (name . id) pair. With optional PROMPT, use that instead of default."
-  (let* ((containers (docker-nrepl--get-containers))
-         (prompt (or prompt "Select Docker container: "))
-         ;; Set up annotation function for Marginalia if available
-         (annotf (lambda (cand)
-                   (when-let ((container (assoc cand containers)))
-                     (docker-nrepl--container-info container))))
-         ;; Add annotation function to marginalia if it exists
-         (marginalia-annotate-original nil))
-    
-    ;; Add Marginalia annotation if available
-    (when (fboundp 'marginalia-mode)
-      (advice-add 'marginalia--annotate-original :override
-                  (lambda (cand) (funcall annotf cand))
-                  '((name . docker-nrepl-annotate))))
-    
-    ;; Do the actual completion
-    (unwind-protect 
-        (let ((selected-name (completing-read prompt
-                                              (mapcar #'car containers)
-                                              nil t nil
-                                              'docker-nrepl-container-history
-                                              (when docker-nrepl-last-container
-                                                (car docker-nrepl-last-container)))))
-          (setq docker-nrepl-last-container (assoc selected-name containers))
-          docker-nrepl-last-container)
-      
-      ;; Remove the advice when done
-      (when (fboundp 'marginalia-mode)
-        (advice-remove 'marginalia--annotate-original 'docker-nrepl-annotate)))))
+  (let* ((prompt (or prompt "Select Docker container: "))
+         (completion-table (docker-nrepl--completion-table))
+         (selected-name (completing-read prompt
+                                         completion-table
+                                         nil t nil
+                                         'docker-nrepl-container-history
+                                         (when docker-nrepl-last-container
+                                           (car docker-nrepl-last-container))))
+         (containers (docker-nrepl--get-containers)))
+    (setq docker-nrepl-last-container (assoc selected-name containers))
+    docker-nrepl-last-container))
 
 (defun docker-nrepl-connect--with-retry (force-select)
   "Helper function that implements the retry logic for docker-nrepl-connect.
@@ -252,6 +247,16 @@ With prefix ARG, prompt for container selection first."
   "Save docker-nrepl data when Emacs is killed."
   (docker-nrepl-save-data))
 
+;; Register with Marginalia if available
+(defun docker-nrepl--setup-marginalia ()
+  "Set up Marginalia integration for Docker containers."
+  (when (and (boundp 'marginalia-annotators)
+             (fboundp 'marginalia-mode))
+    ;; Add our annotator to the marginalia annotators list
+    (unless (assq 'docker-container marginalia-annotators)
+      (push '(docker-container docker-nrepl--marginalia-annotate builtin none)
+            marginalia-annotators))))
+
 ;;;###autoload
 (defun docker-nrepl-setup ()
   "Set up docker-nrepl.
@@ -262,6 +267,9 @@ This loads saved data and sets up hooks and keybindings."
   
   ;; Set up hooks
   (add-hook 'kill-emacs-hook #'docker-nrepl--kill-emacs-hook)
+  
+  ;; Set up Marginalia integration
+  (docker-nrepl--setup-marginalia)
   
   ;; Set up keybindings if enabled
   (when docker-nrepl-bind-keys
