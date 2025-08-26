@@ -112,7 +112,7 @@
            (status (string-trim status-info)))
       (marginalia--fields
        (container-id :face 'font-lock-comment-face)
-       (image :face 'font-lock-string-face :truncate 1.0)
+       (image :face 'font-lock-string-face :truncate 0.5)
        (status :face 'success)))))
 
 ;; Create completion table with proper metadata
